@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAdminClient } from "@/shared/api/supabaseAdmin";
 import { generateAssistantReply } from "@/shared/ai/chat";
 import { streamOllamaChat } from "@/shared/ai/ollamaStream";
+import { streamOpenAICompatibleChat } from "@/shared/ai/openaiStream";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,9 @@ export async function POST(req: NextRequest) {
   try {
     const ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
     const ollamaModel = process.env.OLLAMA_MODEL;
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const openaiBaseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+    const openaiModel = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
     const contextPrompt =
       documents.length > 0
         ? "\n\nКонтекст из загруженных документов:\n" +
@@ -77,6 +81,49 @@ export async function POST(req: NextRequest) {
             assistantContent = await streamOllamaChat({
               baseUrl: ollamaBaseUrl,
               model: ollamaModel,
+              messages: [{ role: "user", content: content + contextPrompt }],
+              signal: req.signal,
+              handlers: {
+                onDelta: (delta) => send("delta", { delta }),
+              },
+            });
+
+            send("done", { content: assistantContent, count: newCount, limit: ANON_LIMIT });
+            controller.close();
+          } catch (e: any) {
+            send("error", { error: e?.message ?? "AI call failed" });
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
+    if (wantsStream && openaiKey) {
+      const encoder = new TextEncoder();
+      let assistantContent = "";
+
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (event: string, data: any) => {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          };
+
+          try {
+            send("start", { count: newCount, limit: ANON_LIMIT });
+
+            assistantContent = await streamOpenAICompatibleChat({
+              apiKey: openaiKey,
+              baseUrl: openaiBaseUrl,
+              model: openaiModel,
               messages: [{ role: "user", content: content + contextPrompt }],
               signal: req.signal,
               handlers: {
