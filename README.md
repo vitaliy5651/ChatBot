@@ -50,9 +50,9 @@ npm run dev:socket
 
 ## Demo video
 
-Add a demo video to this README:
-- **GitHub**: create an issue/comment and drag-and-drop a video there → GitHub will upload it and give you a URL. Paste that link here.
-- **Repo file**: put the file into `public/` (e.g. `public/demo.mp4`) and link it as `[demo video](./public/demo.mp4)`.
+https://github.com/user-attachments/assets/173a1445-7be7-4cf0-9acd-abdc9185b8a9
+
+https://github.com/user-attachments/assets/983013fc-e4e3-420f-bef6-4cb453ba43d5
 
 ## How it works (chatbot flow)
 
