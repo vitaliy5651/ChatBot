@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ChatMessage } from "@/shared/ai/chat";
+import type { OpenAICompatibleMessage } from "@/shared/ai/openaiMessages";
 
 export type OpenAIStreamHandlers = {
   onDelta: (delta: string) => void;
@@ -10,11 +10,13 @@ export async function streamOpenAICompatibleChat(args: {
   apiKey: string;
   baseUrl: string;
   model: string;
-  messages: ChatMessage[];
+  messages: OpenAICompatibleMessage[];
   signal?: AbortSignal;
   handlers: OpenAIStreamHandlers;
 }): Promise<string> {
   const base = args.baseUrl.replace(/\/$/, "");
+  const maxTokensRaw = process.env.OPENAI_MAX_TOKENS;
+  const max_tokens = maxTokensRaw ? Number(maxTokensRaw) : undefined;
 
   const response = await fetch(`${base}/chat/completions`, {
     method: "POST",
@@ -27,6 +29,7 @@ export async function streamOpenAICompatibleChat(args: {
       model: args.model,
       messages: args.messages,
       stream: true,
+      ...(Number.isFinite(max_tokens) ? { max_tokens } : null),
     }),
     signal: args.signal,
   });

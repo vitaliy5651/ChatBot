@@ -4,6 +4,7 @@ import { getAdminClient } from "@/shared/api/supabaseAdmin";
 import { generateAssistantReply } from "@/shared/ai/chat";
 import { streamOllamaChat } from "@/shared/ai/ollamaStream";
 import { streamOpenAICompatibleChat } from "@/shared/ai/openaiStream";
+import { buildOpenAICompatibleMessages } from "@/shared/ai/openaiMessages";
 
 export const runtime = "nodejs";
 
@@ -120,11 +121,17 @@ export async function POST(req: NextRequest) {
           try {
             send("start", { count: newCount, limit: ANON_LIMIT });
 
+            const openaiMessages = await buildOpenAICompatibleMessages({
+              messages: [{ role: "user", content }],
+              documents,
+              images: [],
+            });
+
             assistantContent = await streamOpenAICompatibleChat({
               apiKey: openaiKey,
               baseUrl: openaiBaseUrl,
               model: openaiModel,
-              messages: [{ role: "user", content: content + contextPrompt }],
+              messages: openaiMessages,
               signal: req.signal,
               handlers: {
                 onDelta: (delta) => send("delta", { delta }),
@@ -153,6 +160,7 @@ export async function POST(req: NextRequest) {
     const assistantContent = await generateAssistantReply({
       messages: [{ role: "user", content }],
       documents,
+      images: [],
     });
 
     return NextResponse.json({

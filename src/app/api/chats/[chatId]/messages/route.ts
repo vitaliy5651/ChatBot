@@ -4,6 +4,7 @@ import { getAdminClient, getUserIdFromRequest } from "@/shared/api/supabaseAdmin
 import { generateAssistantReply } from "@/shared/ai/chat";
 import { streamOllamaChat } from "@/shared/ai/ollamaStream";
 import { streamOpenAICompatibleChat } from "@/shared/ai/openaiStream";
+import { buildOpenAICompatibleMessages } from "@/shared/ai/openaiMessages";
 import { makeChatTitleFromMessage } from "@/shared/lib/chatTitle";
 
 export const runtime = "nodejs";
@@ -194,11 +195,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
           try {
             send("start", { userMessage, assistantMessageId: assistantId });
 
+            const openaiMessages = await buildOpenAICompatibleMessages({
+              messages: [...conversationHistory.slice(0, -1), { role: "user", content }],
+              documents,
+              images,
+            });
+
             assistantContent = await streamOpenAICompatibleChat({
               apiKey: openaiKey,
               baseUrl: openaiBaseUrl,
               model: openaiModel,
-              messages: [...conversationHistory.slice(0, -1), { role: "user", content: content + contextPrompt }],
+              messages: openaiMessages,
               signal: req.signal,
               handlers: {
                 onDelta: (delta) => send("delta", { delta }),
@@ -246,6 +253,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cha
         { role: "user", content },
       ],
       documents,
+      images,
     });
   } catch (e) {
     console.error("AI call failed:", e);

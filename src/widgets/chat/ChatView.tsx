@@ -333,9 +333,54 @@ export function ChatView({ chatId }: { chatId?: string }) {
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        const text = await file.text();
-        setDocuments((prev) => [...prev, { url: "", name: file.name, content: text.slice(0, 10000) }]);
-        toast.success("Документ загружен");
+        if (!accessToken) {
+          toast.error("Чтобы прикреплять документы, нужно войти в аккаунт");
+          continue;
+        }
+
+        // Upload to server storage first
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const uploadRes = await fetch(`/api/uploads`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({}));
+          toast.error(err?.error || `Не удалось загрузить документ (HTTP ${uploadRes.status})`);
+          continue;
+        }
+
+        const uploaded = await uploadRes.json();
+        const signedUrl = String(uploaded?.url ?? "");
+        const fileType = String(uploaded?.fileType ?? file.type ?? "");
+        const fileName = String(uploaded?.fileName ?? file.name);
+
+        const extractRes = await fetch(`/api/documents/extract`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ url: signedUrl, fileType }),
+        });
+
+        if (!extractRes.ok) {
+          const err = await extractRes.json().catch(() => ({}));
+          toast.error(err?.error || `Не удалось прочитать документ (HTTP ${extractRes.status})`);
+          continue;
+        }
+
+        const extracted = await extractRes.json();
+        const content = String(extracted?.content ?? "").slice(0, 60000);
+
+        setDocuments((prev) => [...prev, { url: signedUrl, name: fileName, content }]);
+        toast.success("Документ добавлен");
       }
     } catch (error) {
       toast.error("Ошибка чтения документа");
@@ -708,7 +753,7 @@ export function ChatView({ chatId }: { chatId?: string }) {
                     <input
                       ref={docInputRef}
                       type="file"
-                      accept=".txt,.md,.pdf,.doc,.docx"
+                      accept=".txt,.md,.pdf,.docx"
                       multiple
                       onChange={handleDocumentUpload}
                       className="hidden"

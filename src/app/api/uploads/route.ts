@@ -4,6 +4,28 @@ import { getAdminClient, getUserIdFromRequest } from "@/shared/api/supabaseAdmin
 
 export const runtime = "nodejs";
 
+function sanitizeFilename(originalName: string) {
+  const name = (originalName || "file")
+    .normalize("NFKD")
+    // strip combining marks
+    .replace(/[\u0300-\u036f]/g, "")
+    // no path separators
+    .replace(/[\/\\]/g, "-");
+
+  const lastDot = name.lastIndexOf(".");
+  const ext = lastDot > 0 ? name.slice(lastDot).toLowerCase() : "";
+  const stem = lastDot > 0 ? name.slice(0, lastDot) : name;
+
+  const safeStem =
+    stem
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "file";
+
+  const safeExt = /^[.][a-z0-9]{1,10}$/.test(ext) ? ext : "";
+  return `${safeStem}${safeExt}`;
+}
+
 async function ensureBucket(bucketName: string) {
   const supabaseAdmin = getAdminClient();
   const { data: buckets } = await supabaseAdmin.storage.listBuckets();
@@ -27,7 +49,8 @@ export async function POST(req: NextRequest) {
   const bucketName = "chat-attachments";
   await ensureBucket(bucketName);
 
-  const fileName = `${userId}/${crypto.randomUUID()}-${file.name}`;
+  const safeName = sanitizeFilename(file.name);
+  const fileName = `${userId}/${crypto.randomUUID()}-${safeName}`;
   const fileBuffer = await file.arrayBuffer();
 
   const { error: uploadError } = await supabaseAdmin.storage
