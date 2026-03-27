@@ -48,6 +48,32 @@ Optional realtime (Socket.IO server):
 npm run dev:socket
 ```
 
+## Demo video
+
+Add a demo video to this README:
+- **GitHub**: create an issue/comment and drag-and-drop a video there → GitHub will upload it and give you a URL. Paste that link here.
+- **Repo file**: put the file into `public/` (e.g. `public/demo.mp4`) and link it as `[demo video](./public/demo.mp4)`.
+
+## How it works (chatbot flow)
+
+- **UI (Next.js App Router)**: the main chat UI lives in `src/widgets/chat/ChatLayout.tsx` (sidebar) and `src/widgets/chat/ChatView.tsx` (messages + composer).
+- **Auth & sessions (Supabase)**: the client keeps an auth session and sends `Authorization: Bearer <access_token>` to protected API routes.
+- **Chats & messages (DB)**: chats and messages are stored in Supabase Postgres (`supabase/schema.sql`) with RLS enabled.
+- **Streaming answers (SSE)**:
+  - On send, the client calls `POST /api/chats/:chatId/messages` with `{ content, images, documents, stream: true }`.
+  - The server responds with **Server-Sent Events** (`text/event-stream`) and emits `delta` chunks while the model is generating.
+  - The client appends deltas to the last assistant message and shows a typing indicator; `AbortController` powers **Stop generating**.
+- **Images**:
+  - Images are first uploaded via `POST /api/uploads` → stored in Supabase Storage and returned as a signed URL.
+  - For OpenAI-compatible providers (e.g. Together/Qwen) the server converts image URLs into `image_url` message parts so the model can actually "see" them.
+- **Documents (.txt/.md/.pdf/.docx)**:
+  - Documents are uploaded via `POST /api/uploads`.
+  - Then the client calls `POST /api/documents/extract` (with the signed URL) to extract text on the server.
+  - Extracted text is sent together with the message as additional context so the model can analyze the document.
+- **Provider selection**:
+  - If `OPENAI_API_KEY` is set → uses OpenAI-compatible `/chat/completions` (streaming supported).
+  - Else if `OLLAMA_BASE_URL` + `OLLAMA_MODEL` are set → uses Ollama.
+
 ## API endpoints (demo checklist)
 
 All endpoints are under `src/app/api` and use correct HTTP verbs:
@@ -63,6 +89,8 @@ All endpoints are under `src/app/api` and use correct HTTP verbs:
   - `POST /api/chats/:chatId/messages`
 - **Uploads**
   - `POST /api/uploads` (multipart)
+- **Document text extraction**
+  - `POST /api/documents/extract`
 - **Anonymous quota**
   - `GET /api/anonymous/usage`
   - `POST /api/anonymous/usage`
